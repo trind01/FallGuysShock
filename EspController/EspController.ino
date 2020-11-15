@@ -67,6 +67,7 @@ void loop() {
   if (ESP_BT.available()) //Check if we receive anything from Bluetooth
   {
     char incoming = ESP_BT.read(); //Read what we recevive
+    ESP_BT.write(incoming); //Read what we recevive
 //    if(incoming == 'F') //We lost
 //    {
 //      bleKeyboard.releaseAll();
