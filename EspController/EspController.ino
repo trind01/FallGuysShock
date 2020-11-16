@@ -1,18 +1,18 @@
 #include <Wire.h>
-//#include <BleKeyboard.h>
 #include "BluetoothSerial.h"
 
 bool start_game = false;
 void ButtonInterrupt();
 
+//Controls
+void wakeUp();
+bool isHolding();
+bool isJumping();
+bool isDiving();
+
+
 //Accelerometer vars
 const byte MPU_ADDR = 0x68;
-//Bluetooth instances
-//BleKeyboard bleKeyboard;
-BluetoothSerial ESP_BT; //Object for Bluetooth
-
-//Button vars. Button is active low
-const byte BOOT_BUTTON_PIN = 0;
 int16_t accelerometer_x, accelerometer_y, accelerometer_z; // variables for accelerometer raw data
 int16_t gyro_x, gyro_y, gyro_z; // variables for gyro raw data
 int16_t temperature; // variables for temperature data
@@ -21,6 +21,11 @@ char* convert_int16_to_str(int16_t i) { // converts int16 to string. Moreover, r
   sprintf(tmp_str, "%6d", i);
   return tmp_str;
 }
+
+BluetoothSerial ESP_BT; //Object for Bluetooth
+
+//Button vars. Button is active low
+const byte BOOT_BUTTON_PIN = 0;
 
 //Relay Vars
 const byte RELAY_PIN = 2;
@@ -43,18 +48,18 @@ void setup() {
   Wire.write(0);
   Wire.endTransmission(true);
 
-  //Set up Bluetooth Keyboard and Serial
+  //Set up and Serial
   ESP_BT.begin("ESP Bluetooth Controller"); //Name of your Bluetooth Signal
-//  bleKeyboard.begin();
 
   //Set up Interrupt for button
   attachInterrupt(BOOT_BUTTON_PIN, ButtonInterrupt, FALLING);
 }
 
 void loop() {
-//  if(start_game)
-//  {
-//    getMPUReadings(); //Check if we are doing a movement
+  if(start_game)
+  {
+    getMPUReadings(); //Update Movement Variables
+    movement(gyro_y,accelerometer_z); 
 //    if(isDuck())
 //    {
 //      Duck();
@@ -63,11 +68,11 @@ void loop() {
 //    {
 //      Jump();
 //    }
-//  }
+  }
   if (ESP_BT.available()) //Check if we receive anything from Bluetooth
   {
     char incoming = ESP_BT.read(); //Read what we recevive
-    ESP_BT.write(incoming); //Read what we recevive
+    ESP_BT.write(incoming); //write what we recevive
 //    if(incoming == 'F') //We lost
 //    {
 //      bleKeyboard.releaseAll();
@@ -78,7 +83,7 @@ void loop() {
 //    }
     Serial.println(incoming);
   }
-  delay(100);
+  delay(50);
 }
 
 void SetRelay(bool state)
@@ -92,6 +97,8 @@ void ButtonInterrupt()
 //  relayState = !relayState;
 //  SetRelay(relayState);
   SetRelay(false);
+  uint8_t w = 'w';
+  ESP_BT.write(&w,1);
 }
 
 void getMPUReadings()
@@ -111,20 +118,73 @@ void getMPUReadings()
   gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
   
   // print out data
-//  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
-//  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
-//  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
-//  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-//  Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
-//  Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
-//  Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
-//  Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
-//  Serial.println();
+  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
+  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
+  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
+  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
+  Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
+  Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
+  Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
+  Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+  Serial.println();
 }
 
 ///////////////////////////////////////////////////////////
 /////////////////////Control Functions/////////////////////
 ///////////////////////////////////////////////////////////
+
+//gY will be the turning more positive is left, more negative is right
+//aZ will determine if I'm moving forward
+void movement(int16_t gY, int16_t aZ)
+{
+  int16_t x,y;
+  //Check if should move forward
+  if(aZ < 0){
+//    y = min(-1*aZ,10000);
+      y = 23000;
+  } else
+  {
+    y = 0;
+  }
+
+  //Check if should turn
+  if(gY < -10000)
+  {
+    //turn right
+    x = gY * -1;
+  } else if (gY > 18000)
+  {
+    //turn left
+    x = gY * -1;
+  } else
+  {
+    x = 0;
+  }
+
+  uint8_t mBytes[5] = {'m', uint8_t(x >> 8), (uint8_t)x, int8_t(y >> 8), (uint8_t)y};
+  ESP_BT.write(mBytes,sizeof(mBytes));
+}
+
+void wakeUp()
+{
+  
+}
+
+bool isHolding()
+{
+  
+}
+
+bool isJumping()
+{
+  
+}
+
+bool isDiving()
+{
+  
+}
+
 bool isDuck()
 {
   return (gyro_x > 10000 && accelerometer_z < -1000);
