@@ -5,11 +5,9 @@ bool start_game = false;
 void ButtonInterrupt();
 
 //Controls
-void wakeUp();
-bool isHolding();
-bool isJumping();
-bool isDiving();
-
+bool Jumping = false;
+unsigned long jumpDebounce = 0;
+int jumpCount = 0;
 
 //Accelerometer vars
 const byte MPU_ADDR = 0x68;
@@ -59,15 +57,9 @@ void loop() {
   if(start_game)
   {
     getMPUReadings(); //Update Movement Variables
-    movement(gyro_y,accelerometer_z); 
-//    if(isDuck())
-//    {
-//      Duck();
-//    }
-//    else if(isJump())
-//    {
-//      Jump();
-//    }
+    movement(accelerometer_x,accelerometer_z); 
+    Jump();
+    Dive();
   }
   if (ESP_BT.available()) //Check if we receive anything from Bluetooth
   {
@@ -83,7 +75,8 @@ void loop() {
 //    }
     Serial.println(incoming);
   }
-  delay(50);
+//  delay(50);
+delay(50);
 }
 
 void SetRelay(bool state)
@@ -108,7 +101,7 @@ void getMPUReadings()
   Wire.endTransmission(false); // the parameter indicates that the Arduino will send a restart. As a result, the connection is kept active.
   Wire.requestFrom(MPU_ADDR, 7*2, true); // request a total of 7*2=14 registers
   
-  // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
+//   "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
   accelerometer_x = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
   accelerometer_y = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
   accelerometer_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
@@ -118,44 +111,43 @@ void getMPUReadings()
   gyro_z = Wire.read()<<8 | Wire.read(); // reading registers: 0x47 (GYRO_ZOUT_H) and 0x48 (GYRO_ZOUT_L)
   
   // print out data
-  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
-  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
-  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
-  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
-  Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
-  Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
-  Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
-  Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
-  Serial.println();
+//  Serial.print("aX = "); Serial.print(convert_int16_to_str(accelerometer_x));
+//  Serial.print(" | aY = "); Serial.print(convert_int16_to_str(accelerometer_y));
+//  Serial.print(" | aZ = "); Serial.print(convert_int16_to_str(accelerometer_z));
+//  // the following equation was taken from the documentation [MPU-6000/MPU-6050 Register Map and Description, p.30]
+//  Serial.print(" | tmp = "); Serial.print(temperature/340.00+36.53);
+//  Serial.print(" | gX = "); Serial.print(convert_int16_to_str(gyro_x));
+//  Serial.print(" | gY = "); Serial.print(convert_int16_to_str(gyro_y));
+//  Serial.print(" | gZ = "); Serial.print(convert_int16_to_str(gyro_z));
+//  Serial.println();
 }
 
 ///////////////////////////////////////////////////////////
 /////////////////////Control Functions/////////////////////
 ///////////////////////////////////////////////////////////
 
-//gY will be the turning more positive is left, more negative is right
+//aX will be the turning more negative is left, more positive is right
 //aZ will determine if I'm moving forward
-void movement(int16_t gY, int16_t aZ)
+void movement(int16_t aX, int16_t aZ)
 {
   int16_t x,y;
   //Check if should move forward
   if(aZ < 0){
-//    y = min(-1*aZ,10000);
-      y = 23000;
+    y = abs((int16_t)map(aZ, 0, -5500, 23000, 32767));
   } else
   {
     y = 0;
   }
 
   //Check if should turn
-  if(gY < -10000)
-  {
-    //turn right
-    x = gY * -1;
-  } else if (gY > 18000)
+  if(aX < -2000)
   {
     //turn left
-    x = gY * -1;
+    x = -16000;
+  } else if (aX > 4000)
+  {
+    //turn right
+    x = 16000;
   } else
   {
     x = 0;
@@ -165,64 +157,42 @@ void movement(int16_t gY, int16_t aZ)
   ESP_BT.write(mBytes,sizeof(mBytes));
 }
 
-void wakeUp()
+void Hold()
 {
   
 }
 
-bool isHolding()
-{
-  
-}
 
-bool isJumping()
+void Dive()
 {
-  
-}
-
-bool isDiving()
-{
-  
-}
-
-bool isDuck()
-{
-  return (gyro_x > 10000 && accelerometer_z < -1000);
-}
-
-bool isJump()
-{
-  if(isDuck())
+  if(Jumping && (gyro_x > 7000))
   {
-    return false;
+    uint8_t d = 'd';
+//    Serial.println("dive");
+    ESP_BT.write(&d,1);
   }
-  return (accelerometer_y > 19000);
 }
 
 void Jump()
 {
-//  if(bleKeyboard.isConnected())
+  if( (accelerometer_y > 20000) && !Jumping && ((millis() - jumpDebounce) > 500) && (accelerometer_y != 0xFFFF) )
   {
-//    bleKeyboard.press(KEY_UP_ARROW);
-    while(isJump())
+    jumpCount++;
+    if(jumpCount >= 3)
     {
-      getMPUReadings();
-      delay(10);
+      Jumping = true;
+      uint8_t j = 'j';
+      jumpCount = 0;
+      ESP_BT.write(&j,1);
+//      Serial.println("JUMP");
     }
-//    bleKeyboard.release(KEY_UP_ARROW);
   }
-}
-
-void Duck()
-{
-//    if(bleKeyboard.isConnected())
+  else if( Jumping && (accelerometer_y < 17000) && (accelerometer_y > 4000) )
   {
-//    bleKeyboard.press(KEY_DOWN_ARROW);
-    while(accelerometer_z < 1000)
-    {
-      getMPUReadings();
-      delay(10);
-    }
-//    bleKeyboard.release(KEY_DOWN_ARROW);
+    Jumping = false;
+    uint8_t f = 'f';
+    ESP_BT.write(&f,1);
+    jumpDebounce = millis();
+//    Serial.println("Fall");
   }
 }
