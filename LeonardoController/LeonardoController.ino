@@ -40,8 +40,11 @@ void parseControl(char ctrl)
     case 'j': //Jump
     {
       XInput.press(BUTTON_A);
-      XInput.release(BUTTON_A);
       break;
+    }
+    case 'f': //Stop Jump/fall
+    {
+      XInput.release(BUTTON_A);
     }
     case 'd': //Dive
     {
@@ -70,6 +73,7 @@ void parseControl(char ctrl)
       x = (xHi << 8) | xLo;
       y = (yHi << 8) | yLo;
       XInput.setJoystick(JOY_LEFT,x,y);
+      XInput.setJoystick(JOY_RIGHT,x,y);
 //      Serial1.write((uint8_t *)x,2);
 //      Serial1.write((uint8_t *)y,2);
       break;
