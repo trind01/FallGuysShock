@@ -8,6 +8,10 @@ bool LEDLevel = false;
 void parseControl(char ctrl);
 void rumbleCallback(uint8_t packetType);
 
+bool sendRumble = false;
+uint8_t rumbleLeft = 0;
+uint8_t rumbleRight = 0;
+
 void setup() {
 	XInput.begin();
   Serial1.begin(9600);
@@ -23,6 +27,12 @@ void loop() {
   if(Serial1.available()){
     char inChar = (char)Serial1.read(); //read the input
     parseControl(inChar);
+  }
+  if(sendRumble)
+  {
+    sendRumble = false;
+    uint8_t R[3] = {'r',rumbleLeft,rumbleRight};
+    Serial1.write(R,3);
   }
   delay(10);
 }
@@ -93,12 +103,15 @@ void rumbleCallback(uint8_t packetType) {
 
   // If we have a rumble packet (0x00), see our rumble data on the LED
   else if (packetType == (uint8_t) XInputReceiveType::Rumble) {
-      uint8_t rumbleLeft = XInput.getRumbleLeft();
-      uint8_t rumbleRight = XInput.getRumbleRight();
-      if(rumbleLeft)
+      rumbleLeft = XInput.getRumbleLeft();
+      rumbleRight = XInput.getRumbleRight();
+      if(rumbleLeft > 0xF0)
       {
         LEDLevel = !LEDLevel;
         digitalWrite(LEDPIN,LEDLevel);
+        rumbleLeft = XInput.getRumbleLeft();
+        rumbleRight = XInput.getRumbleRight();
+        sendRumble = true;
       }
   }
 }
