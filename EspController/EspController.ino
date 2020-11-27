@@ -25,10 +25,11 @@ BluetoothSerial ESP_BT; //Object for Bluetooth
 //Button vars. Button is active low
 const byte BOOT_BUTTON_PIN = 0;
 
-//Relay Vars
+//Relay Vars/ Rumble Controls
 const byte RELAY_PIN = 2;
 void SetRelay(bool state);
 bool relayState = false;
+unsigned long rumbleDebounce = 0;
 
 void setup() {
 
@@ -64,24 +65,30 @@ void loop() {
   if (ESP_BT.available()) //Check if we receive anything from Bluetooth
   {
     char incoming = ESP_BT.read(); //Read what we recevive
-    ESP_BT.write(incoming); //write what we recevive
-//    if(incoming == 'F') //We lost
-//    {
-//      bleKeyboard.releaseAll();
-//      start_game = false;
-//      SetRelay(true);
-//      delay(2000);
-//      SetRelay(false);
-//    }
-    Serial.println(incoming);
+    if(incoming == 'r') //We lost
+    {
+      uint8_t rumbleLeft = ESP_BT.read(); //Read what we recevive
+      uint8_t rumbleRight = ESP_BT.read(); //Read what we recevive
+      SetRelay(true);
+    }
   }
-//  delay(50);
+  rumbleCheck();
 delay(50);
+}
+
+void rumbleCheck()
+{
+  if(relayState && (millis() - rumbleDebounce > 100)) 
+  {
+    SetRelay(false);
+  }
 }
 
 void SetRelay(bool state)
 {
   digitalWrite(RELAY_PIN,state);
+  relayState = state;
+  rumbleDebounce = millis();
 }
 
 void ButtonInterrupt()
